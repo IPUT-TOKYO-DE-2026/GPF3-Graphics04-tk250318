@@ -1,4 +1,6 @@
 ﻿#include "FrameBufferEmulator.h"
+#include <iostream>
+#include <ctime>
 
 
 //  buff フレームバッファの先頭アドレス
@@ -32,13 +34,15 @@ int centerX; // 円の中心座標X
 int centerY; // 円の中心座標Y
 int radius;  // 円の半径
 unsigned char color[3] = { 10, 200, 0 }; // B, G, R
+Uint32 lastUpdateTime = 0; // 押され始めた時間
+bool isWaitingLongPress = false; // 長押しの待ち時間かどうかの判定
 
 // 初期化処理（最初に1回だけ呼び出される）
 void FrameBufferEmulator::initUser()
 {
 	// フレームバッファの中心座標を求める
-	centerX = width / 2;
-	centerY = height / 2;
+	centerX = width / 2; // 横幅の半分を代入
+	centerY = height / 2; // 縦幅の半分を代入
 	radius = 100; // 初期の半径
 }
 
@@ -46,9 +50,29 @@ void FrameBufferEmulator::initUser()
 void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, int keyTrigger)
 {
 
-	if (keyTrigger == SDLK_UP) { // 上矢印キーが押されたら
-		radius++;  // 半径を大きくする
+	if (keyTrigger == SDLK_UP) { // 上矢印キーが押されたら(押したとき1度だけ呼び出される)
+		radius++;  // 最初に一回だけ半径を大きくする
+		lastUpdateTime = SDL_GetTicks(); // 押され始めた時間を取得
+		isWaitingLongPress = true; // 待機モードに突入
 	}
+	if (keyLevel == SDLK_UP) { // 上矢印キーが押され続けたら(押し続けている限り何度でも呼び出される)
+		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
+		// 押され続けた場合の処理
+		if (isWaitingLongPress) { // 待機モード
+			if (now - lastUpdateTime > 500) { // 500ミリ秒(0.5秒)経過したら
+				radius++; // 半径を大きくし始める
+				lastUpdateTime = now; // 連続モードに移行し始めた時刻を記録
+				isWaitingLongPress = false; // 待機モードを解除し連続モードに移行
+			}
+		}
+		else { // 連続モード
+			if (now - lastUpdateTime > 50) { // 50ミリ秒経過したら
+				radius++; // 半径を大きくし続ける
+				lastUpdateTime = now; // 半径を大きくしたら時間をリセット
+			}
+		}
+	}
+	
 	if (keyTrigger == SDLK_DOWN) { // 下矢印キーが押されたら
 		radius--; // 半径を小さくする
 	}
