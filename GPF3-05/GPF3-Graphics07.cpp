@@ -86,17 +86,32 @@ void FrameBufferEmulator::initUser()
 // 描画処理（毎フレーム呼び出される）
 void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, int keyTrigger)
 {
-	// 半径を大きくする処理
+
+	// 半径を大きくする処理（＆ダブルタップでステップ増加）
 	if (keyTrigger == SDLK_UP) { // 上矢印キーが押されたら(押したとき一度だけ呼び出される)
-		radius++;  // 最初に一度だけ半径を大きくする
-		lastUpdateTime = SDL_GetTicks(); // 押され始めた時間を取得
-		isWaitingLongPress = true; // 待機モードに突入
+		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
+		// 前回押された時から0.3秒以内にもう一度押された場合
+		if (now - lastDownKeyPressTime < 300) {
+			radius += 50; // 半径を一気に大きくする
+			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
+			isWaitingLongPress = true; // 待機モードに突入
+
+			lastDownKeyPressTime = 0; // 3回連続で押したときの誤爆を防ぐために一回目に押した時間をリセット
+		}
+		// 普通に押された場合
+		else {
+			radius++; // 最初に一度だけ半径を大きくする
+			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
+			isWaitingLongPress = true; // 待機モードに突入
+
+			lastDownKeyPressTime = now; // 一回目に押した時間を取得（ダブルタップ用）
+		}
 	}
 	if (keyLevel == SDLK_UP) { // 上矢印キーが押され続けたら(押し続けている限り何度でも呼び出される)
 		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
 		// 押され続けた場合の処理
 		if (isWaitingLongPress) { // 待機モード
-			if (now - lastUpdateTime > 500) { // 500ミリ秒(0.5秒)経過したら
+			if (now - lastUpdateTime > 300) { // 300ミリ秒(0.3秒)経過したら
 				radius += 4; // 半径を大きくし始める
 				lastUpdateTime = now; // 連続モードに移行し始めた時刻を記録
 				isWaitingLongPress = false; // 待機モードを解除し連続モードに移行
@@ -110,16 +125,17 @@ void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, 
 		}
 	}
 	
-	// 半径を小さくする処理（＆ダブルタップで最初の状態にリセット）
+
+
+	// 半径を小さくする処理（＆ダブルタップで半径をリセット）
 	if (keyTrigger == SDLK_DOWN) { // 下矢印キーが押されたら(押したとき一度だけ呼び出される)
 		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
 		// 前回押された時から0.3秒以内にもう一度押された場合
 		if (now - lastDownKeyPressTime < 300) {
-			radius = 100;
-			hue = 120;
-
+			radius = 100; // 半径を初期値にリセット
 			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
 			isWaitingLongPress = true; // 待機モードに突入
+			
 			lastDownKeyPressTime = 0; // 3回連続で押したときの誤爆を防ぐために一回目に押した時間をリセット
 		}
 		// 普通に押された場合
@@ -128,14 +144,14 @@ void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, 
 			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
 			isWaitingLongPress = true; // 待機モードに突入
 
-			lastDownKeyPressTime = now; // 一回目に押した時間を取得（ダブルクリック用）
+			lastDownKeyPressTime = now; // 一回目に押した時間を取得（ダブルタップ用）
 		}
 	}
 	if (keyLevel == SDLK_DOWN) { // 下矢印キーが押され続けたら(押し続けている限り何度でも呼び出される)
 		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
 		// 押され続けた場合の処理
 		if (isWaitingLongPress) { // 待機モード
-			if (now - lastUpdateTime > 500) { // 500ミリ秒(0.5秒)経過したら
+			if (now - lastUpdateTime > 300) { // 300ミリ秒(0.3秒)経過したら
 				radius -= 4; // 半径を小さくし始める
 				lastUpdateTime = now; // 連続モードに移行し始めた時刻を記録
 				isWaitingLongPress = false; // 待機モードを解除し連続モードに移行
@@ -149,17 +165,40 @@ void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, 
 		}
 	}
 
-	// 色相環の角度を上げる処理
+
+
+	// 半径が0より小さくなったら、強制的に0で止める
+	if (radius < 0) {
+		radius = 0;
+	}
+
+
+
+	// 色相環の角度を上げる処理（＆ダブルタップでステップ増加）
 	if (keyTrigger == SDLK_LEFT) { // 左矢印キーが押されたら(押したとき一度だけ呼び出される)
-		hue++; // 最初に一度だけ角度を上げる
-		lastUpdateTime = SDL_GetTicks(); // 押され始めた時間を取得
-		isWaitingLongPress = true; // 待機モードに突入
+		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
+		// 前回押された時から0.3秒以内にもう一度押された場合
+		if (now - lastDownKeyPressTime < 300) {
+			hue += 60; // 角度を一気に大きくする
+			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
+			isWaitingLongPress = true; // 待機モードに突入
+
+			lastDownKeyPressTime = 0; // 3回連続で押したときの誤爆を防ぐために一回目に押した時間をリセット
+		}
+		// 普通に押された場合
+		else {
+			hue++; // 最初に一度だけ角度を大きくする
+			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
+			isWaitingLongPress = true; // 待機モードに突入
+
+			lastDownKeyPressTime = now; // 一回目に押した時間を取得（ダブルタップ用）
+		}
 	}
 	if (keyLevel == SDLK_LEFT) { // 左矢印キーが押され続けたら(押し続けている限り何度でも呼び出される)
 		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
 		// 押され続けた場合の処理
 		if (isWaitingLongPress) { // 待機モード
-			if (now - lastUpdateTime > 500) { // 500ミリ秒(0.5秒)経過したら
+			if (now - lastUpdateTime > 300) { // 300ミリ秒(0.3秒)経過したら
 				hue += 4; // 角度を上げ始める
 				lastUpdateTime = now; // 連続モードに移行し始めた時刻を記録
 				isWaitingLongPress = false; // 待機モードを解除し連続モードに移行
@@ -173,22 +212,33 @@ void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, 
 		}
 	}
 
-	// 半径が0より小さくなったら、強制的に0で止める
-	if (radius < 0) {
-		radius = 0;
-	}
 
-	// 色相環の角度を下げる処理
+
+	// 色相環の角度を下げる処理（＆ダブルタップで色をリセット）
 	if (keyTrigger == SDLK_RIGHT) { // 右矢印キーが押されたら(押したとき一度だけ呼び出される)
-		hue--; // 最初に一度だけ角度を下げる
-		lastUpdateTime = SDL_GetTicks(); // 押され始めた時間を取得
-		isWaitingLongPress = true; // 待機モードに突入
+		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
+		// 前回押された時から0.3秒以内にもう一度押された場合
+		if (now - lastDownKeyPressTime < 300) {
+			hue = 120; // 角度を初期値にリセット
+			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
+			isWaitingLongPress = true; // 待機モードに突入
+
+			lastDownKeyPressTime = 0; // 3回連続で押したときの誤爆を防ぐために一回目に押した時間をリセット
+		}
+		// 普通に押された場合
+		else {
+			hue--; // 最初に一度だけ角度を小さくする
+			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
+			isWaitingLongPress = true; // 待機モードに突入
+
+			lastDownKeyPressTime = now; // 一回目に押した時間を取得（ダブルタップ用）
+		}
 	}
 	if (keyLevel == SDLK_RIGHT) { // 右矢印キーが押され続けたら(押し続けている限り何度でも呼び出される)
 		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
 		// 押され続けた場合の処理
 		if (isWaitingLongPress) { // 待機モード
-			if (now - lastUpdateTime > 500) { // 500ミリ秒(0.5秒)経過したら
+			if (now - lastUpdateTime > 300) { // 300ミリ秒(0.3秒)経過したら
 				hue -= 4; // 角度を下げ始める
 				lastUpdateTime = now; // 連続モードに移行し始めた時刻を記録
 				isWaitingLongPress = false; // 待機モードを解除し連続モードに移行
@@ -201,6 +251,8 @@ void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, 
 			}
 		}
 	}
+
+
 
 	updateColorFromHue(hue, color); // 色を決める
 	drawFilledCircle(buff, width, height, radius, centerX, centerY, color); // 円を描画する
