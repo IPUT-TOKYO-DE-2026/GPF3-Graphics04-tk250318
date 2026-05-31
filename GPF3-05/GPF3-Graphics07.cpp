@@ -68,9 +68,10 @@ void updateColorFromHue(int hue, unsigned char color[3]) {
 int centerX; // 円の中心座標X
 int centerY; // 円の中心座標Y
 int radius;  // 円の半径
-int hue; // 色相環の角度
+int hue = 120; // 色相環の角度
 unsigned char color[3] = { 10, 200, 0 }; // B, G, R
 Uint32 lastUpdateTime = 0; // 押され始めた時間
+Uint32 lastDownKeyPressTime = 0; // 下矢印キーが最後に押された時間
 bool isWaitingLongPress = false; // 長押しの待ち時間かどうかの判定
 
 // 初期化処理（最初に1回だけ呼び出される）
@@ -109,11 +110,26 @@ void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, 
 		}
 	}
 	
-	// 半径を小さくする処理
+	// 半径を小さくする処理（＆ダブルタップで最初の状態にリセット）
 	if (keyTrigger == SDLK_DOWN) { // 下矢印キーが押されたら(押したとき一度だけ呼び出される)
-		radius--; // 最初に一度だけ半径を小さくする
-		lastUpdateTime = SDL_GetTicks(); // 押され始めた時間を取得
-		isWaitingLongPress = true; // 待機モードに突入
+		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
+		// 前回押された時から0.3秒以内にもう一度押された場合
+		if (now - lastDownKeyPressTime < 300) {
+			radius = 100;
+			hue = 120;
+
+			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
+			isWaitingLongPress = true; // 待機モードに突入
+			lastDownKeyPressTime = 0; // 3回連続で押したときの誤爆を防ぐために一回目に押した時間をリセット
+		}
+		// 普通に押された場合
+		else {
+			radius--; // 最初に一度だけ半径を小さくする
+			lastUpdateTime = now; // 押され始めた時間を取得（長押し用）
+			isWaitingLongPress = true; // 待機モードに突入
+
+			lastDownKeyPressTime = now; // 一回目に押した時間を取得（ダブルクリック用）
+		}
 	}
 	if (keyLevel == SDLK_DOWN) { // 下矢印キーが押され続けたら(押し続けている限り何度でも呼び出される)
 		Uint32 now = SDL_GetTicks(); // 現在のミリ秒を取得
@@ -155,6 +171,11 @@ void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, 
 				lastUpdateTime = now; // 角度を上げるたびに時間をリセット
 			}
 		}
+	}
+
+	// 半径が0より小さくなったら、強制的に0で止める
+	if (radius < 0) {
+		radius = 0;
 	}
 
 	// 色相環の角度を下げる処理
