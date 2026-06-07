@@ -65,17 +65,68 @@ void updateColorFromHue(int hue, unsigned char color[3]) {
 	color[2] = r; // 赤
 }
 
+// キー入力のクラス化
+class KeyHandler {
+private:
+	Uint32 lastKeyPressTime = 0;
+	Uint32 lastUpdateTime = 0;
+	bool isWaitingLongPress = false;
+
+public:
+	// ボタンの状態を表す「列挙型(enum)」を作っておく
+	enum class State {
+		NONE,           // 何もなし
+		SINGLE_TAP,     // 単発押し
+		DOUBLE_TAP,     // ダブルタップ
+		REPEAT          // 長押し中の連続実行
+	};
+
+	// 毎フレーム呼び出して、現在のボタンの状態を返す関数
+	State update(bool isTriggered, bool isPressed, Uint32 now) {
+		if (isTriggered) {
+			if (now - lastKeyPressTime < 300) {
+				lastUpdateTime = now;
+				isWaitingLongPress = true;
+				lastKeyPressTime = 0; // 誤爆防止
+				return State::DOUBLE_TAP;
+			}
+			else {
+				lastUpdateTime = now;
+				isWaitingLongPress = true;
+				lastKeyPressTime = now;
+				return State::SINGLE_TAP;
+			}
+		}
+
+		if (isPressed) {
+			if (isWaitingLongPress) {
+				if (now - lastUpdateTime > 300) {
+					lastUpdateTime = now;
+					isWaitingLongPress = false;
+					return State::REPEAT;
+				}
+			}
+			else {
+				if (now - lastUpdateTime > 50) {
+					lastUpdateTime = now;
+					return State::REPEAT;
+				}
+			}
+		}
+
+		return State::NONE; // 何も起きていない
+	}
+};
+
 int centerX; // 円の中心座標X
 int centerY; // 円の中心座標Y
 int radius;  // 円の半径
 int hue = 120; // 色相環の角度
 unsigned char color[3] = { 10, 200, 0 }; // B, G, R
-Uint32 lastUpdateTime = 0; // 押され始めた時間
-Uint32 lastUpKeyPressTime = 0;
-Uint32 lastDownKeyPressTime = 0;
-Uint32 lastLeftKeyPressTime = 0;
-Uint32 lastRightKeyPressTime = 0;
-bool isWaitingLongPress = false; // 長押しの待ち時間かどうかの判定
+KeyHandler upKey;
+KeyHandler downKey;
+KeyHandler leftKey;
+KeyHandler rightKey;
 
 // 初期化処理（最初に1回だけ呼び出される）
 void FrameBufferEmulator::initUser()
@@ -92,151 +143,43 @@ void FrameBufferEmulator::drawUser(unsigned char* buff, int mode, int keyLevel, 
 	// 現在のミリ秒を取得
 	Uint32 now = SDL_GetTicks();
 
-
-	// 単発押し＆ダブルタップの処理 
-	switch (keyTrigger) {
-	case SDLK_UP: // 上矢印キーが押されたら
-		if (now - lastUpKeyPressTime < 300) {
-			radius += 50; // 半径を一気に大きくする
-			lastUpdateTime = now;
-			isWaitingLongPress = true;
-			lastUpKeyPressTime = 0; // 誤爆防止
-		}
-		else {
-			radius++; // 最初に一度だけ半径を大きくする
-			lastUpdateTime = now;
-			isWaitingLongPress = true;
-			lastUpKeyPressTime = now;
-		}
-		break;
-
-	case SDLK_DOWN: // 下矢印キーが押されたら
-		if (now - lastDownKeyPressTime < 300) {
-			radius = 100; // 半径を初期値にリセット
-			lastUpdateTime = now;
-			isWaitingLongPress = true;
-			lastDownKeyPressTime = 0; // 誤爆防止
-		}
-		else {
-			radius--; // 最初に一度だけ半径を小さくする
-			lastUpdateTime = now;
-			isWaitingLongPress = true;
-			lastDownKeyPressTime = now;
-		}
-		break;
-
-	case SDLK_LEFT: // 左矢印キーが押されたら
-		if (now - lastLeftKeyPressTime < 300) {
-			hue += 60; // 色相環の角度を一気に大きくする
-			lastUpdateTime = now;
-			isWaitingLongPress = true;
-			lastLeftKeyPressTime = 0; // 誤爆防止
-		}
-		else {
-			hue++; // 最初に一度だけ色相環の角度を大きくする
-			lastUpdateTime = now;
-			isWaitingLongPress = true;
-			lastLeftKeyPressTime = now;
-		}
-		break;
-
-	case SDLK_RIGHT: // 右矢印キーが押されたら
-		if (now - lastRightKeyPressTime < 300) {
-			hue = 120; // 色相環の角度を初期値にリセット
-			lastUpdateTime = now;
-			isWaitingLongPress = true;
-			lastRightKeyPressTime = 0; // 誤爆防止
-		}
-		else {
-			hue--; // 最初に一度だけ色相環の角度を小さくする
-			lastUpdateTime = now;
-			isWaitingLongPress = true;
-			lastRightKeyPressTime = now;
-		}
-		break;
-
-	default:
-		break;
+	// 上キーの処理
+	switch (upKey.update(keyTrigger == SDLK_UP, keyLevel == SDLK_UP, now)) {
+	case KeyHandler::State::SINGLE_TAP: radius++; break;
+	case KeyHandler::State::DOUBLE_TAP: radius += 50; break;
+	case KeyHandler::State::REPEAT:     radius += 4; break;
+	default: break;
 	}
 
-
-	// 押しっぱなしの処理
-	switch (keyLevel) {
-	case SDLK_UP: // 上矢印キーが押され続けたら半径を大きくし続ける
-		if (isWaitingLongPress) {
-			if (now - lastUpdateTime > 300) {
-				radius += 4;
-				lastUpdateTime = now;
-				isWaitingLongPress = false;
-			}
-		}
-		else {
-			if (now - lastUpdateTime > 50) {
-				radius += 4;
-				lastUpdateTime = now;
-			}
-		}
-		break;
-
-	case SDLK_DOWN: // 下矢印キーが押され続けたら半径を小さくし続ける
-		if (isWaitingLongPress) {
-			if (now - lastUpdateTime > 300) {
-				radius -= 4;
-				lastUpdateTime = now;
-				isWaitingLongPress = false;
-			}
-		}
-		else {
-			if (now - lastUpdateTime > 50) {
-				radius -= 4;
-				lastUpdateTime = now;
-			}
-		}
-		break;
-
-	case SDLK_LEFT: // 左矢印キーが押され続けたら色相環の角度を大きくし続ける
-		if (isWaitingLongPress) {
-			if (now - lastUpdateTime > 300) {
-				hue += 4;
-				lastUpdateTime = now;
-				isWaitingLongPress = false;
-			}
-		}
-		else {
-			if (now - lastUpdateTime > 50) {
-				hue += 4;
-				lastUpdateTime = now;
-			}
-		}
-		break;
-
-	case SDLK_RIGHT: // 右矢印キーが押され続けたら色相環の角度を小さくし続ける
-		if (isWaitingLongPress) {
-			if (now - lastUpdateTime > 300) {
-				hue -= 4;
-				lastUpdateTime = now;
-				isWaitingLongPress = false;
-			}
-		}
-		else {
-			if (now - lastUpdateTime > 50) {
-				hue -= 4;
-				lastUpdateTime = now;
-			}
-		}
-		break;
-
-	default:
-		break;
+	// 下キーの処理
+	switch (downKey.update(keyTrigger == SDLK_DOWN, keyLevel == SDLK_DOWN, now)) {
+	case KeyHandler::State::SINGLE_TAP: radius--; break;
+	case KeyHandler::State::DOUBLE_TAP: radius = 100; break;
+	case KeyHandler::State::REPEAT:     radius -= 4; break;
+	default: break;
 	}
 
+	// 左キーの処理
+	switch (leftKey.update(keyTrigger == SDLK_LEFT, keyLevel == SDLK_LEFT, now)) {
+	case KeyHandler::State::SINGLE_TAP: hue++; break;
+	case KeyHandler::State::DOUBLE_TAP: hue += 60; break;
+	case KeyHandler::State::REPEAT:     hue += 4; break;
+	default: break;
+	}
+
+	// 右キーの処理
+	switch (rightKey.update(keyTrigger == SDLK_RIGHT, keyLevel == SDLK_RIGHT, now)) {
+	case KeyHandler::State::SINGLE_TAP: hue--; break;
+	case KeyHandler::State::DOUBLE_TAP: hue = 120; break;
+	case KeyHandler::State::REPEAT:     hue -= 4; break;
+	default: break;
+	}
 
 	// 境界値のチェック
 	// 半径が0より小さくなったら、強制的に0で止める
 	if (radius < 0) {
 		radius = 0;
 	}
-
 
 	updateColorFromHue(hue, color); // 色を決める
 	drawFilledCircle(buff, width, height, radius, centerX, centerY, color); // 円を描画する
